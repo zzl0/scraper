@@ -59,9 +59,9 @@ case class Alias(
     UnresolvedAttribute(name)
   }
 
-  override def annotatedString: String = s"(${child.annotatedString} AS `$name`#${expressionId.id})"
+  override def annotatedString: String = s"${child.annotatedString} AS `$name`#${expressionId.id}"
 
-  override def sql: String = s"(${child.sql} AS `$name`)"
+  override def sql: String = s"${child.sql} AS `$name`"
 
   override lazy val strictlyTypedForm: Try[Alias] = for {
     e <- child.strictlyTypedForm

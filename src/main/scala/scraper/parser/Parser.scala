@@ -25,12 +25,17 @@ abstract class TokenParser[T] extends StdTokenParsers {
   private val keywords = mutable.Set.empty[String]
 
   protected case class Keyword(name: String) {
-    keywords += name
+    keywords += name.toLowerCase
+
+    def asParser: Parser[String] = {
+      val lowerCased = name.toLowerCase
+      lowerCased: Parser[String]
+    }
   }
 
   override lazy val lexical: Tokens = new Lexical(keywords.toSet)
 
-  protected implicit def keywordAsParser(k: Keyword): Parser[String] = k.name
+  protected implicit def keywordAsParser(k: Keyword): Parser[String] = k.asParser
 
   def parse(input: String): T = synchronized {
     phrase(start)(new lexical.Scanner(input)) match {
@@ -68,6 +73,9 @@ class Parser extends TokenParser[LogicalPlan] {
   private val GROUP = Keyword("GROUP")
   private val BY = Keyword("BY")
   private val HAVING = Keyword("HAVING")
+
+  private val IS = Keyword("IS")
+  private val NULL = Keyword("NULL")
 
   override protected def start: Parser[LogicalPlan] =
     select
@@ -171,7 +179,8 @@ class Parser extends TokenParser[LogicalPlan] {
     | termExpression ~ (">=" ~> termExpression) ^^ { case e1 ~ e2 => GtEq(e1, e2) }
     | termExpression ~ ("<" ~> termExpression) ^^ { case e1 ~ e2 => Lt(e1, e2) }
     | termExpression ~ ("<=" ~> termExpression) ^^ { case e1 ~ e2 => LtEq(e1, e2) }
-    | booleanLiteral
+    | termExpression <~ IS ~ NULL ^^ IsNull
+    | termExpression <~ IS ~ NOT ~ NULL ^^ IsNotNull
   )
 
   private def termExpression: Parser[Expression] = (
@@ -249,7 +258,12 @@ class Lexical(keywords: Set[String]) extends StdLexical with Tokens {
     "(", ")", "[", "]", ",", ";", ":", "."
   )
 
-  reserved ++= keywords
+  reserved ++= keywords.map(_.toLowerCase)
+
+  override protected def processIdent(name: String) = {
+    val lowerCase = name.toLowerCase
+    if (reserved contains lowerCase) Keyword(lowerCase) else super.processIdent(name)
+  }
 
   override def token: Parser[Token] = (
     // Identifiers and keywords

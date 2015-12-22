@@ -8,7 +8,7 @@ import scraper.types.{DataType, PrimitiveType}
 abstract sealed class SortDirection
 
 case object Ascending extends SortDirection {
-  override def toString: String = "ASCE"
+  override def toString: String = "ASC"
 }
 
 case object Descending extends SortDirection {
@@ -31,7 +31,7 @@ case class SortOrder(child: Expression, direction: SortDirection)
 
   override def annotatedString: String = s"$child $direction"
 
-  def isAscending: Boolean = direction == Ascending
+  override def sql: String = s"${child.sql} $direction"
 
-  override def sql: String = ???
+  def isAscending: Boolean = direction == Ascending
 }

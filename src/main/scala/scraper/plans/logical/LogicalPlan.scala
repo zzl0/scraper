@@ -42,6 +42,12 @@ trait LogicalPlan extends QueryPlan[LogicalPlan] {
   def limit(n: Int): LogicalPlan = this limit lit(n)
 }
 
+trait InconvertibleToSQL extends LogicalPlan {
+  override def sql: String = throw new UnsupportedOperationException(
+    s"Instances of ${getClass.getSimpleName} cannot be mapped to SQL"
+  )
+}
+
 trait UnresolvedLogicalPlan extends LogicalPlan {
   override def output: Seq[Attribute] = throw new LogicalPlanUnresolved(this)
 
@@ -72,33 +78,29 @@ case class UnresolvedRelation(name: String) extends LeafLogicalPlan with Unresol
   override def sql: String = name
 }
 
-case object EmptyRelation extends LeafLogicalPlan {
+case object EmptyRelation extends LeafLogicalPlan with InconvertibleToSQL {
   override def output: Seq[Attribute] = Nil
-
-  override def sql: String = ???
 }
 
 case object SingleRowRelation extends LeafLogicalPlan {
   override val output: Seq[Attribute] = Nil
 
-  override def sql: String = ???
+  override def sql: String = ""
 }
 
 case class NamedRelation(child: LogicalPlan, tableName: String) extends UnaryLogicalPlan {
-  override def sql: String = s"`$tableName`"
-
   override def output: Seq[Attribute] = child.output
+
+  override def sql: String = s"FROM `$tableName`"
 }
 
 case class LocalRelation(data: Iterable[Row], schema: StructType)
-  extends LeafLogicalPlan {
+  extends LeafLogicalPlan with InconvertibleToSQL {
 
   override val output: Seq[Attribute] = schema.toAttributes
 
   override def nodeCaption: String =
     s"${getClass.getSimpleName} ${output map (_.annotatedString) mkString ", "}"
-
-  override def sql: String = s"`<local-relation>`"
 }
 
 object LocalRelation {
@@ -121,7 +123,7 @@ case class Project(child: LogicalPlan, projections: Seq[NamedExpression])
   override def nodeCaption: String =
     s"${getClass.getSimpleName} ${projections map (_.annotatedString) mkString ", "}"
 
-  override def sql: String = s"SELECT ${projections map (_.sql) mkString ", "} FROM ${child.sql}"
+  override def sql: String = s"SELECT ${projections map (_.sql) mkString ", "} ${child.sql}"
 }
 
 case class Filter(child: LogicalPlan, condition: Expression) extends UnaryLogicalPlan {
@@ -149,12 +151,29 @@ case class Limit(child: LogicalPlan, limit: Expression) extends UnaryLogicalPlan
   override def sql: String = s"${child.sql} LIMIT ${limit.sql}"
 }
 
-trait JoinType
-case object Inner extends JoinType
-case object LeftSemi extends JoinType
-case object LeftOuter extends JoinType
-case object RightOuter extends JoinType
-case object FullOuter extends JoinType
+trait JoinType {
+  def sql: String
+}
+
+case object Inner extends JoinType {
+  override def sql: String = "INNER"
+}
+
+case object LeftSemi extends JoinType {
+  override def sql: String = "LEFT SEMI"
+}
+
+case object LeftOuter extends JoinType {
+  override def sql: String = "LEFT OUTER"
+}
+
+case object RightOuter extends JoinType {
+  override def sql: String = "RIGHT OUTER"
+}
+
+case object FullOuter extends JoinType {
+  override def sql: String = "FULL OUTER"
+}
 
 case class Join(
   left: LogicalPlan,
@@ -175,7 +194,9 @@ case class Join(
     s"${getClass.getSimpleName} $details"
   }
 
-  override def sql: String = ???
+  override def sql: String = {
+    s"${left.sql} ${joinType.sql} JOIN ${right.sql}"
+  }
 }
 
 case class Subquery(child: LogicalPlan, alias: String) extends UnaryLogicalPlan {
@@ -192,16 +213,17 @@ case class Aggregate(
   aggregateExpressions: Seq[NamedExpression]
 ) extends UnaryLogicalPlan {
 
-  override def sql: String = ???
+  override def sql: String = {
+    val aggregations = aggregateExpressions map (_.sql) mkString ", "
+    val groupings = groupingExpressions map (_.sql) mkString ", "
+    s"SELECT $aggregations ${child.sql} GROUP BY $groupings"
+  }
 
   override lazy val output: Seq[Attribute] = aggregateExpressions map (_.toAttribute)
 }
 
-case class Sort(
-  child: LogicalPlan,
-  order: Seq[SortOrder]
-) extends UnaryLogicalPlan {
+case class Sort(child: LogicalPlan, order: Seq[SortOrder]) extends UnaryLogicalPlan {
   override def output: Seq[Attribute] = child.output
 
-  override def sql: String = ???
+  override def sql: String = s"ORDER BY ${order mkString ", "}"
 }

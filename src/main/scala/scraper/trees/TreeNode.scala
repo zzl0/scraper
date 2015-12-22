@@ -4,7 +4,7 @@ import scala.collection.{Traversable, mutable}
 import scala.languageFeature.reflectiveCalls
 
 trait TreeNode[Base <: TreeNode[Base]] extends Product { self: Base =>
-  private type Rule = PartialFunction[Base, Base]
+  private type Transformation = PartialFunction[Base, Base]
 
   def children: Seq[Base]
 
@@ -27,7 +27,10 @@ trait TreeNode[Base <: TreeNode[Base]] extends Product { self: Base =>
     rule applyOrElse (childrenTransformed, identity[Base])
   }
 
-  private def transformChildren(rule: Rule, next: (Base, Rule) => Base): Base = {
+  private def transformChildren(
+    rule: Transformation,
+    next: (Base, Transformation) => Base
+  ): Base = {
     // Returns the transformed tree and a boolean flag indicating whether the transformed tree is
     // equivalent to the original one
     def applyRule(tree: Base): (Base, Boolean) = {
