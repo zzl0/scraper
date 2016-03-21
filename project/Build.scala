@@ -12,7 +12,7 @@ import scoverage.ScoverageSbtPlugin
 object Build extends sbt.Build {
   lazy val scraper =
     Project("scraper", file("."))
-      .aggregate(core, localExecution, repl)
+      .aggregate(core, localExecution, repl, lab)
       .settings(commonSettings)
 
   lazy val core =
@@ -39,6 +39,15 @@ object Build extends sbt.Build {
       .enablePlugins(sbtPlugins: _*)
       .settings(commonSettings)
       .settings(libraryDependencies ++= Dependencies.ammonite)
+      // Explicitly overrides all conflicting transitive dependencies
+      .settings(dependencyOverrides ++= Dependencies.overrides)
+
+  lazy val lab =
+    Project("lab", file("lab"))
+      .dependsOn(core % "compile->compile;test->test")
+      .dependsOn(localExecution % "compile->compile;test->test")
+      .enablePlugins(sbtPlugins: _*)
+      .settings(commonSettings)
       // Explicitly overrides all conflicting transitive dependencies
       .settings(dependencyOverrides ++= Dependencies.overrides)
 
